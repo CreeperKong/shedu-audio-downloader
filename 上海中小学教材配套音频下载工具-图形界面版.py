@@ -54,7 +54,7 @@ LANG = {
 }
 
 # ==============================================================================
-#  CORE LOGIC
+#  CORE LOGIC (Identical to previous version)
 # ==============================================================================
 
 def sanitize_filename(name):
@@ -87,7 +87,6 @@ def download_file(url, base_dir, folder_format, code, title, silent, output_queu
                     if chunk:
                         f.write(chunk)
                         downloaded_bytes += len(chunk)
-                        # Send progress data to the queue instead of using tqdm
                         if not silent:
                             progress_data = {'downloaded': downloaded_bytes, 'total': total_size, 'filename': filename}
                             output_queue.put(('progress', progress_data))
@@ -160,7 +159,6 @@ class App:
         self.silent_check = ttk.Checkbutton(self.options_frame, variable=self.silent_var)
         self.silent_check.grid(row=1, column=2, sticky="w", padx=10, pady=5)
         
-        # --- NEW: Progress Bar ---
         self.progress_frame = ttk.Frame(main_frame)
         self.progress_label = ttk.Label(self.progress_frame, text="", anchor="w")
         self.progress_label.pack(fill=tk.X, expand=True, pady=(0,2))
@@ -193,7 +191,7 @@ class App:
 
     def show_code_menu(self, event):
         has_selection = bool(self.codes_text.tag_ranges("sel"))
-        lang, d = self.lang_var.get(), LANG[self.lang_var.get()]
+        d = LANG[self.lang_var.get()]
         self.code_menu.entryconfig(d['menu_cut'], state=tk.NORMAL if has_selection else tk.DISABLED)
         self.code_menu.entryconfig(d['menu_copy'], state=tk.NORMAL if has_selection else tk.DISABLED)
         self.code_menu.entryconfig(d['menu_delete'], state=tk.NORMAL if has_selection else tk.DISABLED)
@@ -251,10 +249,7 @@ class App:
         options = {'target_dir': self.target_dir_var.get(), 'folder_format': folder_format_code, 'silent': self.silent_var.get(), 'lang': lang}
         self.log_text.configure(state='normal'); self.log_text.delete('1.0', tk.END); self.log_text.configure(state='disabled')
         self.get_urls_button.config(state='disabled'); self.download_button.config(state='disabled')
-        
-        if download and not options['silent']:
-            self.progress_frame.pack(fill=tk.X, expand=False, pady=(0,5))
-        
+        if download and not options['silent']: self.progress_frame.pack(fill=tk.X, expand=False, pady=(0,5))
         threading.Thread(target=self.worker_thread, args=(unique_codes, download, options), daemon=True).start()
 
     def worker_thread(self, codes, download, options):
@@ -267,26 +262,29 @@ class App:
         self.queue.put(('finish', None))
 
     def process_queue(self):
-        try:
-            msg_type, msg_content = self.queue.get_nowait()
-            if msg_type == 'progress':
-                data = msg_content
-                if data['total'] > 0:
-                    percentage = (data['downloaded'] / data['total']) * 100
-                    self.progress_bar['value'] = percentage
-                    self.progress_label['text'] = LANG[self.lang_var.get()]['progress_label'].format(filename=data['filename'])
-                else: # Handle cases where total size is unknown
-                    self.progress_bar.config(mode='indeterminate')
-                    self.progress_bar.start()
-            elif msg_type == 'finish':
-                self.get_urls_button.config(state='normal'); self.download_button.config(state='normal')
-                self.progress_frame.pack_forget() # Hide progress bar when all tasks are done
-                self.progress_bar.config(mode='determinate'); self.progress_bar['value'] = 0
-            else:
-                self.log_message(msg_content, msg_type)
-        except queue.Empty: pass
-        finally:
-            self.root.after(100, self.process_queue)
+        # --- FIX IS HERE: Process all messages in the queue, not just one. ---
+        while not self.queue.empty():
+            try:
+                msg_type, msg_content = self.queue.get_nowait()
+                if msg_type == 'progress':
+                    data = msg_content
+                    if data['total'] > 0:
+                        percentage = (data['downloaded'] / data['total']) * 100
+                        self.progress_bar['value'] = percentage
+                        self.progress_label['text'] = LANG[self.lang_var.get()]['progress_label'].format(filename=data['filename'])
+                    else:
+                        self.progress_bar.config(mode='indeterminate')
+                        self.progress_bar.start()
+                elif msg_type == 'finish':
+                    self.get_urls_button.config(state='normal'); self.download_button.config(state='normal')
+                    self.progress_frame.pack_forget()
+                    self.progress_bar.config(mode='determinate'); self.progress_bar['value'] = 0
+                else:
+                    self.log_message(msg_content, msg_type)
+            except queue.Empty:
+                pass # Should not happen in a while loop, but good practice
+        
+        self.root.after(100, self.process_queue)
 
 if __name__ == "__main__":
     initial_lang = 'en'
