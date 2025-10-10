@@ -1,4 +1,7 @@
 # 上海中小学教材配套音视频资料下载工具
+
+警告：本工具基于公开页面批量下载音视频资料，著作权为出版方所有。如因使用本工具造成版权纠纷，工具作者概不负责！
+
 ## 依赖安装
 ```
 pip install requests beautifulsoup4 colorama tqdm
