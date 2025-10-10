@@ -7,6 +7,9 @@
 pip install requests beautifulsoup4 colorama tqdm
 ```
 ## 使用方法
+### 图形界面版
+安装依赖后双击打开直接使用（Python需要已安装Tcl/Tk组件，使用官网安装包安装时默认选中）
+### 命令行版
 ```
 usage: 上海中小学教材配套音频下载工具.py [-h] -c CODES [-d] [-t TARGET] [-f {ct,c,t,tc,n}] [-v | -s]
 
