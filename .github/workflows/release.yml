@@ -1,0 +1,96 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x86
+            runner: windows-latest
+            python_arch: x86
+            output_ext: .exe
+          - target: windows-x64
+            runner: windows-latest
+            python_arch: x64
+            output_ext: .exe
+          - target: windows-arm64
+            runner: windows-11-arm
+            python_arch: arm64
+            output_ext: .exe
+          - target: macos-arm64
+            runner: macos-14
+            python_arch: arm64
+            output_ext: ""
+          - target: linux-x64
+            runner: ubuntu-latest
+            python_arch: x64
+            output_ext: ""
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+            python_arch: arm64
+            output_ext: ""
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: ${{ matrix.python_arch }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build binaries
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --onefile --name shedu-audio-cli-${{ matrix.target }} "上海中小学教材配套音频下载工具.py"
+          pyinstaller --noconfirm --onefile --windowed --name shedu-audio-gui-${{ matrix.target }} "上海中小学教材配套音频下载工具-图形界面版.py"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.target }}
+          path: |
+            dist/shedu-audio-cli-${{ matrix.target }}${{ matrix.output_ext }}
+            dist/shedu-audio-gui-${{ matrix.target }}${{ matrix.output_ext }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare version
+        run: echo "VERSION=$(date -u +%Y%m%d)" >> "$GITHUB_ENV"
+
+      - name: Create checksums
+        run: |
+          find artifacts -type f -print0 | sort -z | xargs -0 sha256sum > artifacts/SHA256SUMS.txt
+
+      - name: Create or update release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ env.VERSION }}
+          name: ${{ env.VERSION }}
+          body: Automated multi-platform build for ${{ env.VERSION }}.
+          allowUpdates: true
+          replacesArtifacts: true
+          artifacts: artifacts/**/*
+          artifactErrorsFailBuild: true
